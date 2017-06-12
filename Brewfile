@@ -1,0 +1,11 @@
+cask_args appdir: '/Applications'
+
+cask 'the-unarchiver'
+cask 'google-chrome'
+cask 'firefox'
+cask 'slack'
+cask 'evernote'
+cask 'lastpass'
+cask 'dropbox'
+cask 'google-drive'
+cask 'skype'

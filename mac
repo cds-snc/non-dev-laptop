@@ -1,0 +1,118 @@
+#!/bin/bash
+
+# Welcome to the CDS non-dev-laptop script!
+
+fancy_echo() {
+  # shellcheck disable=SC2039
+  local fmt="$1"; shift
+
+  # shellcheck disable=SC2059
+  printf "\n$fmt\n" "$@"
+}
+
+append_to_file() {
+  # shellcheck disable=SC2039
+  local file="$1"
+  # shellcheck disable=SC2039
+  local text="$2"
+
+  if [ "$file" = "$HOME/.zshrc" ]; then
+    if [ -w "$HOME/.zshrc.local" ]; then
+      file="$HOME/.zshrc.local"
+    else
+      file="$HOME/.zshrc"
+    fi
+  elif [ "$file" = "$HOME/.bash_profile" ]; then
+    file="$HOME/.bash_profile"
+  fi
+
+  if ! grep -qs "^$text$" "$file"; then
+    printf "\n%s\n" "$text" >> "$file"
+  fi
+}
+
+create_bash_profile_and_set_it_as_shell_file() {
+  if [ ! -f "$HOME/.bash_profile" ]; then
+    touch "$HOME/.bash_profile"
+  fi
+
+  shell_file="$HOME/.bash_profile"
+}
+
+trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
+
+set -e
+
+if [ ! -d "$HOME/.bin/" ]; then
+  mkdir "$HOME/.bin"
+fi
+
+create_bash_profile_and_set_it_as_shell_file
+
+brew_is_installed() {
+  brew list -1 | grep -Fqx "$1"
+}
+
+tap_is_installed() {
+  brew tap -1 | grep -Fqx "$1"
+}
+
+app_is_installed() {
+  # shellcheck disable=SC2039
+  local app_name
+  app_name=$(echo "$1" | cut -d'-' -f1)
+  find /Applications -iname "$app_name*" -maxdepth 1 | egrep '.*' > /dev/null
+}
+
+append_to_file "$shell_file" "alias laptop='bash <(curl -s https://raw.githubusercontent.com/gcdigital-gcnumerique/non-dev-laptop/master/laptop)'"
+
+append_to_file "$shell_file" 'export PATH="$HOME/.bin:$PATH"'
+
+if ! command -v brew >/dev/null; then
+  fancy_echo "Installing Homebrew ..."
+    curl -fsS \
+      'https://raw.githubusercontent.com/Homebrew/install/master/install' | ruby
+
+    # shellcheck disable=SC2016
+    append_to_file "$shell_file" 'export PATH="/usr/local/bin:$PATH"'
+else
+  fancy_echo "Homebrew already installed. Skipping ..."
+fi
+
+# Remove brew-cask since it is now installed as part of brew tap caskroom/cask.
+# See https://github.com/caskroom/homebrew-cask/releases/tag/v0.60.0
+if brew_is_installed 'brew-cask'; then
+  brew uninstall --force 'brew-cask'
+fi
+
+if tap_is_installed 'caskroom/versions'; then
+  brew untap caskroom/versions
+fi
+
+fancy_echo "Updating Homebrew..."
+cd "$(brew --repo)" && git fetch && git reset --hard origin/master && brew update
+
+fancy_echo "Verifying the Homebrew installation..."
+if brew doctor; then
+  fancy_echo "Your Homebrew installation is good to go."
+else
+  fancy_echo "Your Homebrew installation reported some errors or warnings."
+  echo "If the warnings are related to Python, you can ignore them."
+  echo "Otherwise, review the Homebrew messages to see if any action is needed."
+fi
+
+fancy_echo "Installing formulas and casks from the Brewfile ..."
+if brew bundle --file="$HOME/Brewfile"; then
+  fancy_echo "All formulas and casks were installed successfully."
+else
+  fancy_echo "Some formulas or casks failed to install."
+  echo "This is usually due to one of the Mac apps being already installed,"
+  echo "in which case, you can ignore these errors."
+fi
+
+if [ -f "$HOME/.laptop.local" ]; then
+  # shellcheck source=/dev/null
+  . "$HOME/.laptop.local"
+fi
+
+fancy_echo 'All done!'
